@@ -1,0 +1,8 @@
+[package]
+name = "logfilter"
+version = "0.0.1"
+authors = ["Eugene Homyakov <ehomyakov@gmail.com>"]
+
+[dependencies]
+toml = "*"
+
