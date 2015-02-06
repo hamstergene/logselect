@@ -1,20 +1,20 @@
 extern crate getopts;
-use getopts::Options;
 use std::os;
 
 fn main() {
-    println!("Hello, world!");
-    let mut opts = Options::new();
-    opts.optmulti("f", "filters", "TOML file with filter specifications", "fl");
-    opts.optflag("h", "help", "print this help and exit");
-    let matches = match opts.parse(os::args().tail()) {
+    let opts = [
+        getopts::optmulti("f", "filters", "TOML file with filter specifications", "fl"),
+        getopts::optflag("h", "help", "print this help and exit"),
+    ];
+    let matches = match getopts::getopts(os::args().tail(), &opts) {
         Ok(m) => { m }
         Err(f) => { panic!(f.to_string()) }
-    }
-    if matches.opt_present("h") {
+    };
+    if matches.opt_present("h") || os::args().len() == 1 {
         let brief = format!("Usage: {} [options]", os::args()[0]);
-        println!("{}", opts.usage(brief.as_slice()));
+        println!("{}", getopts::usage(brief.as_slice(), &opts));
         return;
     }
+    println!("Hello, world!");
 }
 
