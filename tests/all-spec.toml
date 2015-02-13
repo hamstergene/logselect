@@ -1,0 +1,10 @@
+[start_stop_forward]
+start = 'My soul'
+stop = 'in my'
+direction = 'forward'
+
+[start_stop_backward]
+start = 'My heart'
+stop = 'in my'
+direction = 'backward'
+
