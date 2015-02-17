@@ -5,4 +5,5 @@ authors = ["Eugene Homyakov <ehomyakov@gmail.com>"]
 
 [dependencies]
 toml = "*"
+regex = "*"
 

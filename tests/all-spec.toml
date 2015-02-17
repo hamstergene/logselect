@@ -4,7 +4,7 @@ stop = 'in my'
 direction = 'forward'
 
 [start_stop_backward]
-start = 'My heart'
-stop = 'in my'
+start = 'Say that'
+stop = 'is better'
 direction = 'backward'
 
