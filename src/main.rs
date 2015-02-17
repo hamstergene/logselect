@@ -7,19 +7,27 @@ use std::iter;
 use std::old_io::{File, stdio};
 use std::os;
 
+#[cfg(test)]
+use std::ffi::AsOsStr;
+
 fn main()
+{
+    logselect(&os::args())
+}
+
+fn logselect(args: &Vec<String>)
 {
     // cli opts
     let opts = [
         getopts::optmulti("f", "filters", "TOML file(s) with filter specifications", "specs.toml"),
         getopts::optflag("h", "help", "print this help message and exit"),
     ];
-    let matches = match getopts::getopts(os::args().tail(), &opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => { m }
         Err(f) => { panic!(f.to_string()) }
     };
     if matches.opt_present("h") {
-        let brief = format!("Usage: {} [options] [logfile]", os::args()[0]);
+        let brief = format!("Usage: {} [options] [logfile]", args[0]);
         println!("{}", getopts::usage(brief.as_slice(), &opts));
         println!("\nIf `logfile` is not given, the standard input will be used.\n\nWhen no filter spec options are provided,\nlines containing the word \"error\" are selected.");
         return;
@@ -189,5 +197,17 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: usize) -> Option<(usize, us
         cursor += step;
     }
     return None
+}
+
+#[test]
+fn test_all()
+{
+    for entry in std::fs::read_dir(&Path::new("tests/data")).unwrap() {
+        let entry_path = entry.unwrap().path();
+        if entry_path.extension().unwrap().to_str().unwrap() == "toml" {
+            let args : Vec<String> = vec!["logselect".to_string(), "-f".to_string(), entry_path.into_os_string().into_string().unwrap(), "tests/data/sample.txt".to_string()];
+            logselect(&args);
+        }
+    }
 }
 
