@@ -26,7 +26,7 @@ fn main()
     };
     if matches.opt_present("h") {
         let brief = format!("Usage: {} [options] [logfile]", args[0]);
-        println!("{}", getopts::usage(brief.as_slice(), &opts));
+        println!("{}", getopts::usage(&brief[..], &opts));
         println!("\nIf `logfile` is not given, the standard input will be used.\n\nWhen no filter spec options are provided,\nlines containing the word \"error\" are selected.");
         return;
     }
@@ -34,7 +34,7 @@ fn main()
     // parse toml config files
     let mut specs: Vec<Spec> = vec![];
     for filename in matches.opt_strs("f") {
-        consume_specs_toml(filename.as_slice(), &mut specs);
+        consume_specs_toml(&filename[..], &mut specs);
     }
     if specs.len() == 0 {
         let mut spec = Spec::new();
@@ -63,7 +63,7 @@ fn main()
         _ => { panic!("too many filename arguments ({}), expected just one", matches.free.len()) },
     };
 
-    logselect(&specs, input_string.as_slice(), &mut io::stdout())
+    logselect(&specs, &input_string[..], &mut io::stdout())
 }
 
 fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
@@ -209,16 +209,27 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: usize) -> Option<(usize, us
     return None
 }
 
-/*
 #[test]
 fn test_all()
 {
     for entry in std::fs::read_dir(&Path::new("tests/data")).unwrap() {
         let entry_path = entry.unwrap().path();
         if entry_path.extension().unwrap().to_str().unwrap() == "toml" {
-            let args : Vec<String> = vec!["logselect".to_string(), "-f".to_string(), entry_path.into_os_string().into_string().unwrap(), "tests/data/sample.txt".to_string()];
-            logselect(&args);
+            let mut specs: Vec<Spec> = vec![];
+            let toml_path_s = entry_path.clone().into_os_string().into_string().unwrap();
+            consume_specs_toml(&toml_path_s[..], &mut specs);
+
+            let expected_content_path = entry_path.with_extension("txt");
+            let mut expected_content = String::new();
+            match fs::File::open(&expected_content_path) {
+                Err(err) => { panic!("{}: can not open file {}: {}", toml_path_s, expected_content_path.into_os_string().into_string().unwrap(), err); },
+                Ok(ref mut f) => { f.read_to_string(&mut expected_content).unwrap(); },
+            };
+
+            let mut output = Vec::<u8>::new();
+            logselect(&specs, &expected_content[..], &mut output);
+
+            assert!(&expected_content.as_bytes() == &output);
         }
     }
 }
-*/
