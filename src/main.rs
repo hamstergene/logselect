@@ -176,9 +176,12 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
             },
             "direction" => {
                 match *value {
-                    String(ref s) if &s[..] == "forward" => { spec.backward = false },
-                    String(ref s) if &s[..] == "backward" => { spec.backward = true },
-                    _ => { panic!("`direction` must be either \"forward\" or \"backward\"") },
+                    String(ref s) => match &s[..] {
+                        "forward" | "fwd" | "down" => { spec.backward = false },
+                        "backward" | "backwards" | "back" | "up" => { spec.backward = true },
+                        ss => { panic!("`direction` value '{}' unrecognized (must be 'forward' or 'backward')", ss) },
+                    },
+                    _ => { panic!("`direction` must be a string") },
                 }
             },
             _ => {
