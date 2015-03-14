@@ -6,7 +6,7 @@ use std::collections;
 use std::fs;
 use std::iter;
 use std::io;
-use std::io::{Read};
+use std::io::{Read, Write};
 
 #[cfg(test)]
 use std::ffi::AsOsStr;
@@ -212,11 +212,15 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: usize) -> Option<(usize, us
 #[test]
 fn test_all()
 {
+    let mut failed_files = Vec::<String>::new();
+    println!(""); // cargo test prepends tab to the first line, but not the rest
     for entry in std::fs::read_dir(&Path::new("tests/data")).unwrap() {
         let entry_path = entry.unwrap().path();
         if entry_path.extension().unwrap().to_str().unwrap() == "toml" {
             let mut specs: Vec<Spec> = vec![];
             let toml_path_s = entry_path.clone().into_os_string().into_string().unwrap();
+            print!("testing {} ... ", toml_path_s);
+            io::stdout().flush();
             consume_specs_toml(&toml_path_s[..], &mut specs);
 
             let expected_content_path = entry_path.with_extension("txt");
@@ -230,7 +234,17 @@ fn test_all()
             let mut output = Vec::<u8>::new();
             logselect(&specs, &expected_content[..], &mut output);
 
-            assert_eq!(&expected_content.as_bytes(), &output);
+            if (&expected_content.as_bytes() == &output) {
+                println!("+");
+            } else {
+                failed_files.push(toml_path_s);
+                println!("fail");
+            }
         }
+    }
+    if failed_files.len() > 0 {
+        println!("Summary of failed files:");
+        for ffn in failed_files { println!("    {}", ffn); }
+        panic!();
     }
 }

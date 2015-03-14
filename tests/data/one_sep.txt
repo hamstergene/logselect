@@ -1,0 +1,25 @@
+thirty-one -- four
+thirty-two -- four
+thirty-three -- four
+thirty-four -- four
+thirty-five -- four
+thirty-six -- four
+thirty-seven -- four
+thirty-eight -- four
+thirty-nine -- four
+forty -- four
+forty-one -- five
+
+... ... ...
+
+eighty-one -- nine
+eighty-two -- nine
+eighty-three -- nine
+eighty-four -- nine
+eighty-five -- nine
+eighty-six -- nine
+eighty-seven -- nine
+eighty-eight -- nine
+eighty-nine -- nine
+ninety -- nine
+ninety-one -- ten

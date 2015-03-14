@@ -1,0 +1,11 @@
+eleven -- two
+twelve -- two
+thirteen -- two
+fourteen -- two
+fifteen -- two
+sixteen -- two
+seventeen -- two
+eighteen -- two
+nineteen -- two
+twenty -- two
+twenty-one -- three
