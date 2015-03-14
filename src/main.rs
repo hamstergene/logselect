@@ -69,7 +69,7 @@ fn main()
 fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
 {
     let lines : Vec<&str> = iter::FromIterator::from_iter(content.lines_any());
-    let mut selected_indexes = collections::BitVec::new();
+    let mut selected_indexes = collections::BitVec::from_elem(lines.len(), false);
     for index in range(0, lines.len()) {
         for spec in specs.iter() {
             match spec.start {
@@ -220,16 +220,17 @@ fn test_all()
             consume_specs_toml(&toml_path_s[..], &mut specs);
 
             let expected_content_path = entry_path.with_extension("txt");
+            let expected_content_path_str = expected_content_path.clone().into_os_string().into_string().unwrap();
             let mut expected_content = String::new();
             match fs::File::open(&expected_content_path) {
-                Err(err) => { panic!("{}: can not open file {}: {}", toml_path_s, expected_content_path.into_os_string().into_string().unwrap(), err); },
+                Err(err) => { panic!("{}: can not open file {}: {}", toml_path_s, expected_content_path_str, err); },
                 Ok(ref mut f) => { f.read_to_string(&mut expected_content).unwrap(); },
             };
 
             let mut output = Vec::<u8>::new();
             logselect(&specs, &expected_content[..], &mut output);
 
-            assert!(&expected_content.as_bytes() == &output);
+            assert_eq!(&expected_content.as_bytes(), &output);
         }
     }
 }
