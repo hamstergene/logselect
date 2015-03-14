@@ -1,0 +1,6 @@
+[while_f]
+start = 'fifteen'
+while = 'two$'
+stop = 'nine'
+direction = "backward"
+

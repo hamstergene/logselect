@@ -129,6 +129,7 @@ struct Spec
     disable: bool,
     start: Option<Regex>,
     stop: Option<Regex>,
+    whale: Option<Regex>,
     backward: bool,
 }
 
@@ -136,7 +137,7 @@ impl Spec
 {
     fn new() -> Self
     {
-        Spec { disable: false, start: None, stop: None, backward: false }
+        Spec { disable: false, start: None, stop: None, whale: None, backward: false }
     }
 }
 
@@ -174,6 +175,17 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
                     _ => { panic!("`stop` key must be regex string") },
                 }
             },
+            "while" => {
+                match *value {
+                    String(ref rxs) => {
+                        match Regex::new(&rxs[..]) {
+                            Ok(rx) => { spec.whale = Some(rx) },
+                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); },
+                        }
+                    },
+                    _ => { panic!("`while` key must be regex string") },
+                }
+            },
             "direction" => {
                 match *value {
                     String(ref s) => match &s[..] {
@@ -193,7 +205,7 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
         }
     }
 
-    if !spec.disable && spec.start.is_some() && (spec.stop.is_some() || false) {
+    if !spec.disable && spec.start.is_some() && (spec.stop.is_some() || spec.whale.is_some()) {
         specs.push(spec);
     }
 }
@@ -207,16 +219,28 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: usize) -> Option<(usize, us
             Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor as usize)) },
             _ => {},
         };
+        match spec.whale {
+            Some(ref rx) if !rx.is_match(lines[cursor as usize]) => { return Some((index, (cursor-step) as usize)) },
+            _ => {},
+        };
         cursor += step;
     }
-    return None
+    match spec.whale {
+        Some(ref rx) => { return Some((index, (cursor-step) as usize)) },
+        _ => { return None },
+    };
 }
 
 #[test]
 fn test_all()
 {
+    let mut sample_content = String::new();
+    fs::File::open(&Path::new("tests/data/sample.txt")).unwrap().read_to_string(&mut sample_content).unwrap();
+    let sample_content = sample_content; // make immutable
+
     let mut failed_files = Vec::<String>::new();
     println!(""); // cargo test prepends tab to the first line, but not the rest
+
     for entry in std::fs::read_dir(&Path::new("tests/data")).unwrap() {
         let entry_path = entry.unwrap().path();
         if entry_path.extension().unwrap().to_str().unwrap() == "toml" {
@@ -235,13 +259,15 @@ fn test_all()
             };
 
             let mut output = Vec::<u8>::new();
-            logselect(&specs, &expected_content[..], &mut output);
+            logselect(&specs, &sample_content, &mut output);
 
             if (&expected_content.as_bytes() == &output) {
                 println!("+");
             } else {
                 failed_files.push(toml_path_s);
-                println!("fail");
+                println!("fail\n\t{} spec(s) recognized\n--- expected ---\n{}--- actual ---", specs.len(), &expected_content[..]);
+                io::stdout().write(&output);
+                println!("--- end ---");
             }
         }
     }

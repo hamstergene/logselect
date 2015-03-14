@@ -1,0 +1,6 @@
+fifteen -- two
+sixteen -- two
+seventeen -- two
+eighteen -- two
+nineteen -- two
+twenty -- two

@@ -1,0 +1,6 @@
+ninety-five -- ten
+ninety-six -- ten
+ninety-seven -- ten
+ninety-eight -- ten
+ninety-nine -- ten
+one hundred -- ten
