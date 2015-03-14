@@ -1,0 +1,13 @@
+[a]
+start = 'one$'
+stop = 'eleven'
+
+[b]
+start = '^five'
+stop = 'eleven'
+
+[c]
+start = 'eleven'
+stop = 'one$'
+direction = 'backward'
+
