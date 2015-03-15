@@ -1,0 +1,7 @@
+[x]
+start = 'nineteen'
+start_offset = -1000
+stop = 'twelve'
+stop_offset = +1000
+direction = "backward"
+

@@ -74,10 +74,18 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
         for spec in specs.iter() {
             match spec.start {
                 Some(ref rx) if rx.is_match(lines[index]) => {
-                    match try_select(&spec, &lines, index) {
-                        Some((a, b)) => {
-                            for i in (if a < b { range(a, b+1) } else { range(b, a+1) } ) {
-                                selected_indexes.set(i, true);
+                    match try_select(&spec, &lines, index as isize) {
+                        Some((a0, b0)) => {
+                            let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
+
+                            // std::cmp should have this function
+                            fn clamp<T>(a: T, x: T, b: T) -> T where T: Ord { std::cmp::min(std::cmp::max(a, x), b) }
+                            let last_index = (lines.len() - 1) as isize;
+                            let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
+
+                            // if after applying offsets the range remains nonempty
+                            for i in (if a0 < b0 { range(a, b+1) } else { range(b, a+1) } ) {
+                                selected_indexes.set(i as usize, true);
                             }
                         },
                         _ => {},
@@ -128,7 +136,9 @@ struct Spec
 {
     disable: bool,
     start: Option<Regex>,
+    start_offset: isize,
     stop: Option<Regex>,
+    stop_offset: isize,
     whale: Option<Regex>,
     backward: bool,
 }
@@ -137,7 +147,7 @@ impl Spec
 {
     fn new() -> Self
     {
-        Spec { disable: false, start: None, stop: None, whale: None, backward: false }
+        Spec { disable: false, start: None, start_offset: 0, stop: None, stop_offset: 0, whale: None, backward: false }
     }
 }
 
@@ -164,6 +174,10 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
                     _ => { panic!("`start` key must be regex string") },
                 }
             },
+            "start_offset" => match *value {
+                Integer(ofs) => { spec.start_offset = ofs as isize; },
+                _ => { panic!("`start_offset` must be integer") },
+            },
             "stop" => {
                 match *value {
                     String(ref rxs) => {
@@ -174,6 +188,10 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
                     },
                     _ => { panic!("`stop` key must be regex string") },
                 }
+            },
+            "stop_offset" => match *value {
+                Integer(ofs) => { spec.stop_offset = ofs as isize; },
+                _ => { panic!("`stop_offset` must be integer") },
             },
             "while" => {
                 match *value {
@@ -210,23 +228,23 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
     }
 }
 
-fn try_select(spec: &Spec, lines: &Vec<&str>, index: usize) -> Option<(usize, usize)>
+fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, isize)>
 {
     let step = if spec.backward { -1 } else { 1 };
-    let mut cursor : isize = (index as isize) + step;
+    let mut cursor = index + step;
     while (cursor >= 0) && (cursor < lines.len() as isize) {
         match spec.stop {
-            Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor as usize)) },
+            Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor)) },
             _ => {},
         };
         match spec.whale {
-            Some(ref rx) if !rx.is_match(lines[cursor as usize]) => { return Some((index, (cursor-step) as usize)) },
+            Some(ref rx) if !rx.is_match(lines[cursor as usize]) => { return Some((index, cursor-step)) },
             _ => {},
         };
         cursor += step;
     }
     match spec.whale {
-        Some(ref rx) => { return Some((index, (cursor-step) as usize)) },
+        Some(ref rx) => { return Some((index, cursor-step)) },
         _ => { return None },
     };
 }
@@ -265,8 +283,8 @@ fn test_all()
                 println!("+");
             } else {
                 failed_files.push(toml_path_s);
-                println!("fail\n\t{} spec(s) recognized\n--- expected ---\n{}--- actual ---", specs.len(), &expected_content[..]);
-                io::stdout().write(&output);
+                println!("fail\n\t{} spec(s) recognized\n--- expected ---\n{}\n--- actual ---", specs.len(), &expected_content[..]);
+                println!("{}", std::str::from_utf8(&output).unwrap());
                 println!("--- end ---");
             }
         }
