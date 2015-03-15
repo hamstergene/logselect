@@ -74,7 +74,8 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
         for spec in specs.iter() {
             match spec.start {
                 Some(ref rx) if rx.is_match(lines[index]) => {
-                    match try_select(&spec, &lines, index as isize) {
+                    let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, &lines, index as isize) } else { Some((index as isize,index as isize)) };
+                    match sel_range {
                         Some((a0, b0)) => {
                             let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
 
@@ -84,7 +85,7 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
                             let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
 
                             // if after applying offsets the range remains nonempty
-                            for i in (if a0 < b0 { range(a, b+1) } else { range(b, a+1) } ) {
+                            for i in (if a0 <= b0 { range(a, b+1) } else { range(b, a+1) } ) {
                                 selected_indexes.set(i as usize, true);
                             }
                         },
@@ -223,7 +224,7 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
         }
     }
 
-    if !spec.disable && spec.start.is_some() && (spec.stop.is_some() || spec.whale.is_some()) {
+    if !spec.disable && spec.start.is_some() {
         specs.push(spec);
     }
 }
