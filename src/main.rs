@@ -1,3 +1,5 @@
+#![feature(collections)]
+
 extern crate getopts;
 extern crate regex;
 extern crate toml;
@@ -7,26 +9,23 @@ use std::fs;
 use std::iter;
 use std::io;
 use std::io::{Read, Write};
-
-#[cfg(test)]
-use std::ffi::AsOsStr;
+use std::path;
 
 fn main()
 {
     let args : Vec<_> = std::env::args().collect();
 
     // cli opts
-    let opts = [
-        getopts::optmulti("f", "filters", "TOML file(s) with filter specifications", "specs.toml"),
-        getopts::optflag("h", "help", "print this help message and exit"),
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let mut opts = getopts::Options::new();
+    opts.optmulti("f", "filters", "TOML file(s) with filter specifications", "specs.toml");
+    opts.optflag("h", "help", "print this help message and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
         Err(f) => { panic!(f.to_string()) }
     };
     if matches.opt_present("h") {
         let brief = format!("Usage: {} [options] [logfile]", args[0]);
-        println!("{}", getopts::usage(&brief[..], &opts));
+        println!("{}", opts.usage(&brief[..]));
         println!("\nIf `logfile` is not given, the standard input will be used.\n\nWhen no filter spec options are provided,\nlines containing the word \"error\" are selected.");
         return;
     }
@@ -50,7 +49,7 @@ fn main()
             buffer
         },
         1 => {
-            let path = Path::new(matches.free[0].clone());
+            let path = path::Path::new(&matches.free[0]);
             match fs::File::open(&path) {
                 Err(why) => { panic!("can't open {}: {}", matches.free[0], why.to_string()) },
                 Ok(ref mut f) => {
@@ -70,7 +69,7 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
 {
     let lines : Vec<&str> = iter::FromIterator::from_iter(content.lines_any());
     let mut selected_indexes = collections::BitVec::from_elem(lines.len(), false);
-    for index in range(0, lines.len()) {
+    for index in 0..lines.len() {
         for spec in specs.iter() {
             match spec.start {
                 Some(ref rx) if rx.is_match(lines[index]) => {
@@ -85,7 +84,7 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
                             let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
 
                             // if after applying offsets the range remains nonempty
-                            for i in (if a0 <= b0 { range(a, b+1) } else { range(b, a+1) } ) {
+                            for i in (if a0 <= b0 { a..b+1 } else { b..a+1 } ) {
                                 selected_indexes.set(i as usize, true);
                             }
                         },
@@ -99,7 +98,7 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
 
     // output
     let mut prev_index = 0;
-    for index in range(0, lines.len()) {
+    for index in 0..lines.len() {
         if selected_indexes[index] {
             if prev_index > 0 {
                 if index + 1 - prev_index > 1 {
@@ -115,7 +114,7 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
 
 fn consume_specs_toml(filename: &str, specs: &mut Vec<Spec>)
 {
-    let path = Path::new(filename);
+    let path = path::Path::new(filename);
     let mut file = match fs::File::open(&path) {
         Err(why) => { panic!("can't open {}: {}", filename, why.to_string()) },
         Ok(f) => f,
@@ -245,7 +244,7 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, is
         cursor += step;
     }
     match spec.whale {
-        Some(ref rx) => { return Some((index, cursor-step)) },
+        Some(_) => { return Some((index, cursor-step)) },
         _ => { return None },
     };
 }
@@ -254,19 +253,19 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, is
 fn test_all()
 {
     let mut sample_content = String::new();
-    fs::File::open(&Path::new("tests/data/sample.txt")).unwrap().read_to_string(&mut sample_content).unwrap();
+    fs::File::open(&path::Path::new("tests/data/sample.txt")).unwrap().read_to_string(&mut sample_content).unwrap();
     let sample_content = sample_content; // make immutable
 
     let mut failed_files = Vec::<String>::new();
     println!(""); // cargo test prepends tab to the first line, but not the rest
 
-    for entry in std::fs::read_dir(&Path::new("tests/data")).unwrap() {
+    for entry in std::fs::read_dir(&path::Path::new("tests/data")).unwrap() {
         let entry_path = entry.unwrap().path();
         if entry_path.extension().unwrap().to_str().unwrap() == "toml" {
             let mut specs: Vec<Spec> = vec![];
             let toml_path_s = entry_path.clone().into_os_string().into_string().unwrap();
             print!("testing {} ... ", toml_path_s);
-            io::stdout().flush();
+            let _ = io::stdout().flush();
             consume_specs_toml(&toml_path_s[..], &mut specs);
 
             let expected_content_path = entry_path.with_extension("txt");
@@ -280,7 +279,7 @@ fn test_all()
             let mut output = Vec::<u8>::new();
             logselect(&specs, &sample_content, &mut output);
 
-            if (&expected_content.as_bytes() == &output) {
+            if expected_content.as_bytes() == &output[..] {
                 println!("+");
             } else {
                 failed_files.push(toml_path_s);
