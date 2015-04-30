@@ -198,13 +198,14 @@ struct Spec
     stop_offset: isize,
     whale: Option<Regex>,
     backward: bool,
+    limit: isize,
 }
 
 impl Spec
 {
     fn new() -> Self
     {
-        Spec { disable: false, start: None, start_offset: 0, stop: None, stop_offset: 0, whale: None, backward: false }
+        Spec { disable: false, start: None, start_offset: 0, stop: None, stop_offset: 0, whale: None, backward: false, limit: 1000 }
     }
 }
 
@@ -271,6 +272,10 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
                     _ => { panic!("`direction` must be a string") },
                 }
             },
+            "limit" => match *value {
+                Integer(lim) if lim > 0 => { spec.limit = lim as isize; },
+                _ => { panic!("`limit` must be a positive integer") },
+            },
             _ => {
                 match *value {
                     Table(ref t) => { consume_specs_toml_table(&t, specs) },
@@ -289,7 +294,7 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, is
 {
     let step = if spec.backward { -1 } else { 1 };
     let mut cursor = index + step;
-    while (cursor >= 0) && (cursor < lines.len() as isize) {
+    while (cursor >= 0) && (cursor < lines.len() as isize) && (cursor - index).abs() <= spec.limit  {
         match spec.stop {
             Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor)) },
             _ => {},
