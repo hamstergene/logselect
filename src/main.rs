@@ -51,7 +51,7 @@ fn main()
             let mut buffer = String::new();
             io::stdin().read_to_string(&mut buffer).unwrap();
             buffer
-        },
+        }
         1 => {
             let path = path::Path::new(&matches.free[0]);
             match fs::File::open(&path) {
@@ -62,8 +62,8 @@ fn main()
                     buffer
                 },
             }
-        },
-        _ => { panic!("too many filename arguments ({}), expected just one", matches.free.len()) },
+        }
+        _ => { panic!("too many filename arguments ({}), expected just one", matches.free.len()) }
     };
 
     logselect(&specs, &input_string[..], &mut io::stdout())
@@ -103,10 +103,10 @@ fn logselect<'u>(specs: &Vec<Spec>, content: &'u str, writer: &mut io::Write)
     let mut num_finished = 0;
     while num_finished < threads.len() {
         match receiver.recv().unwrap() {
-            (-1,-1) => { num_finished += 1 },
+            (-1,-1) => { num_finished += 1 }
             (a,b) => for i in a..b {
                 selected_indexes.set(i as usize, true);
-            },
+            }
         }
     }
 
@@ -173,8 +173,8 @@ fn consume_specs_toml(filename: &str, specs: &mut Vec<Spec>)
 {
     let path = path::Path::new(filename);
     let mut file = match fs::File::open(&path) {
-        Err(why) => { panic!("can't open {}: {}", filename, why.to_string()) },
-        Ok(f) => f,
+        Err(why) => { panic!("can't open {}: {}", filename, why.to_string()) }
+        Ok(f) => f
     };
 
     let mut content = String::new();
@@ -182,8 +182,8 @@ fn consume_specs_toml(filename: &str, specs: &mut Vec<Spec>)
 
     let mut parser = toml::Parser::new(&content[..]);
     let table = match parser.parse() {
-        Some(t) => t,
-        None => { panic!("parse error in {}: {}", filename, parser.errors[0]) },
+        Some(t) => { t }
+        None => { panic!("parse error in {}: {}", filename, parser.errors[0]) }
     };
 
     consume_specs_toml_table(&table, specs);
@@ -217,71 +217,69 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
         match &key[..] {
             "disable" => {
                 match *value {
-                    Boolean(x) => { spec.disable = x },
-                    _ => { panic!("`disable` key must be boolean") },
+                    Boolean(x) => { spec.disable = x }
+                    _ => { panic!("`disable` key must be boolean") }
                 }
-            },
+            }
             "start" => {
                 match *value {
                     String(ref rxs) => {
                         match Regex::new(&rxs[..]) {
-                            Ok(rx) => { spec.start = Some(rx) },
-                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); },
+                            Ok(rx) => { spec.start = Some(rx) }
+                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); }
                         }
-                    },
-                    _ => { panic!("`start` key must be regex string") },
+                    }
+                    _ => { panic!("`start` key must be regex string") }
                 }
-            },
-            "start_offset" => match *value {
-                Integer(ofs) => { spec.start_offset = ofs as isize; },
-                _ => { panic!("`start_offset` must be integer") },
-            },
+            }
+            "start_offset" => { match *value {
+                Integer(ofs) => { spec.start_offset = ofs as isize; }
+                _ => { panic!("`start_offset` must be integer") }
+            } }
             "stop" => {
                 match *value {
                     String(ref rxs) => {
                         match Regex::new(&rxs[..]) {
-                            Ok(rx) => { spec.stop = Some(rx) },
-                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); },
+                            Ok(rx) => { spec.stop = Some(rx) }
+                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); }
                         }
-                    },
-                    _ => { panic!("`stop` key must be regex string") },
+                    }
+                    _ => { panic!("`stop` key must be regex string") }
                 }
-            },
-            "stop_offset" => match *value {
-                Integer(ofs) => { spec.stop_offset = ofs as isize; },
-                _ => { panic!("`stop_offset` must be integer") },
-            },
+            }
+            "stop_offset" => { match *value {
+                Integer(ofs) => { spec.stop_offset = ofs as isize; }
+                _ => { panic!("`stop_offset` must be integer") }
+            } }
             "while" => {
                 match *value {
                     String(ref rxs) => {
                         match Regex::new(&rxs[..]) {
-                            Ok(rx) => { spec.whale = Some(rx) },
-                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); },
+                            Ok(rx) => { spec.whale = Some(rx) }
+                            Err(why) => { panic!("cant compile regex: {}", why.to_string()); }
                         }
-                    },
-                    _ => { panic!("`while` key must be regex string") },
+                    }
+                    _ => { panic!("`while` key must be regex string") }
                 }
-            },
+            }
             "direction" => {
                 match *value {
-                    String(ref s) => match &s[..] {
-                        "forward" | "fwd" | "down" => { spec.backward = false },
-                        "backward" | "backwards" | "back" | "up" => { spec.backward = true },
-                        ss => { panic!("`direction` value '{}' unrecognized (must be 'forward' or 'backward')", ss) },
-                    },
-                    _ => { panic!("`direction` must be a string") },
+                    String(ref s) => { match &s[..] {
+                        "forward" | "fwd" | "down" => { spec.backward = false }
+                        "backward" | "backwards" | "back" | "up" => { spec.backward = true }
+                        ss => { panic!("`direction` value '{}' unrecognized (must be 'forward' or 'backward')", ss) }
+                    } }
+                    _ => { panic!("`direction` must be a string") }
                 }
-            },
-            "limit" => match *value {
-                Integer(lim) if lim > 0 => { spec.limit = lim as isize; },
-                _ => { panic!("`limit` must be a positive integer") },
-            },
-            _ => {
-                match *value {
-                    Table(ref t) => { consume_specs_toml_table(&t, specs) },
-                    _ => { panic!("unrecognized key: {}", key) },
-                }
-            },
+            }
+            "limit" => { match *value {
+                Integer(lim) if lim > 0 => { spec.limit = lim as isize; }
+                _ => { panic!("`limit` must be a positive integer") }
+            } }
+            _ => { match *value {
+                Table(ref t) => { consume_specs_toml_table(&t, specs) }
+                _ => { panic!("unrecognized key: {}", key) }
+            } }
         }
     }
 
@@ -296,18 +294,18 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, is
     let mut cursor = index + step;
     while (cursor >= 0) && (cursor < lines.len() as isize) && (cursor - index).abs() <= spec.limit  {
         match spec.stop {
-            Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor)) },
-            _ => {},
+            Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor)) }
+            _ => {}
         };
         match spec.whale {
-            Some(ref rx) if !rx.is_match(lines[cursor as usize]) => { return Some((index, cursor-step)) },
-            _ => {},
+            Some(ref rx) if !rx.is_match(lines[cursor as usize]) => { return Some((index, cursor-step)) }
+            _ => {}
         };
         cursor += step;
     }
     match spec.whale {
-        Some(_) => { return Some((index, cursor-step)) },
-        _ => { return None },
+        Some(_) => { return Some((index, cursor-step)) }
+        _ => { return None }
     };
 }
 
@@ -334,8 +332,8 @@ fn test_all()
             let expected_content_path_str = expected_content_path.clone().into_os_string().into_string().unwrap();
             let mut expected_content = String::new();
             match fs::File::open(&expected_content_path) {
-                Err(err) => { panic!("{}: can not open file {}: {}", toml_path_s, expected_content_path_str, err); },
-                Ok(ref mut f) => { f.read_to_string(&mut expected_content).unwrap(); },
+                Err(err) => { panic!("{}: can not open file {}: {}", toml_path_s, expected_content_path_str, err); }
+                Ok(ref mut f) => { f.read_to_string(&mut expected_content).unwrap(); }
             };
 
             let mut output = Vec::<u8>::new();
