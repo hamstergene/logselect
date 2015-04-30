@@ -1,6 +1,7 @@
-#![feature(collections)]
+#![feature(collections, libc, scoped)]
 
 extern crate getopts;
+extern crate libc;
 extern crate regex;
 extern crate toml;
 use regex::Regex;
@@ -10,6 +11,9 @@ use std::iter;
 use std::io;
 use std::io::{Read, Write};
 use std::path;
+use std::sync;
+use std::sync::mpsc;
+use std::thread;
 
 fn main()
 {
@@ -65,34 +69,44 @@ fn main()
     logselect(&specs, &input_string[..], &mut io::stdout())
 }
 
-fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
+fn logselect<'u>(specs: &Vec<Spec>, content: &'u str, writer: &mut io::Write)
 {
-    let lines : Vec<&str> = iter::FromIterator::from_iter(content.lines_any());
-    let mut selected_indexes = collections::BitVec::from_elem(lines.len(), false);
-    for index in 0..lines.len() {
-        for spec in specs.iter() {
-            match spec.start {
-                Some(ref rx) if rx.is_match(lines[index]) => {
-                    let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, &lines, index as isize) } else { Some((index as isize,index as isize)) };
-                    match sel_range {
-                        Some((a0, b0)) => {
-                            let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
+    let lines : Vec<&'u str> = iter::FromIterator::from_iter(content.lines_any());
+    let work = Work { lines : &lines, specs : specs, index : sync::Mutex::new(0) };
+    let work = sync::Arc::new(work);
 
-                            // std::cmp should have this function
-                            fn clamp<T>(a: T, x: T, b: T) -> T where T: Ord { std::cmp::min(std::cmp::max(a, x), b) }
-                            let last_index = (lines.len() - 1) as isize;
-                            let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
-
-                            // if after applying offsets the range remains nonempty
-                            for i in (if a0 <= b0 { a..b+1 } else { b..a+1 } ) {
-                                selected_indexes.set(i as usize, true);
-                            }
-                        },
-                        _ => {},
-                    };
-                },
-                _ => {},
+    let (sender, receiver) = mpsc::channel();
+    //let num_cpus = 8; // HOW to do it!? The old API is gone somewhere
+    let num_cpus = num_cpus();
+    let mut threads = Vec::with_capacity(num_cpus);
+    for _ in 0..threads.capacity() {
+        let sender = sender.clone();
+        let work = work.clone();
+        threads.push(thread::scoped(move|| {
+            loop {
+                let i = {
+                    let mut p = work.index.lock().unwrap();
+                    let rv = *p;
+                    *p += 1;
+                    rv as usize
+                };
+                if i >= work.specs.len() {
+                    sender.send( (-1, -1) ).unwrap();
+                    break;
+                }
+                process_spec(&work.specs[i], &work.lines, &sender);
             }
+        }));
+    }
+
+    let mut selected_indexes = collections::BitVec::from_elem(lines.len(), false);
+    let mut num_finished = 0;
+    while num_finished < threads.len() {
+        match receiver.recv().unwrap() {
+            (-1,-1) => { num_finished += 1 },
+            (a,b) => for i in a..b {
+                selected_indexes.set(i as usize, true);
+            },
         }
     }
 
@@ -108,6 +122,49 @@ fn logselect(specs: &Vec<Spec>, content: &str, writer: &mut io::Write)
             writer.write(lines[index].as_bytes()).unwrap();
             writer.write(b"\n").unwrap();
             prev_index = index + 1;
+        }
+    }
+}
+
+pub fn num_cpus() -> usize {
+    unsafe {
+        return rust_get_num_cpus() as usize;
+    }
+
+    extern {
+        fn rust_get_num_cpus() -> libc::uintptr_t;
+    }
+}
+
+struct Work<'a>
+{
+    lines: &'a Vec<&'a str>,
+    specs: &'a Vec<Spec>,
+    index: sync::Mutex<isize>,
+}
+
+fn process_spec(spec: &Spec, lines: &Vec<&str>, sender: &mpsc::Sender<(isize, isize)>)
+{
+    if let Some(ref rx) = spec.start {
+        for index in 0..lines.len() {
+            if rx.is_match(lines[index]) {
+                let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, &lines, index as isize) } else { Some((index as isize,index as isize)) };
+                if let Some((a0,b0)) = sel_range {
+                    let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
+
+                    // std::cmp should have this function
+                    fn clamp<T>(a: T, x: T, b: T) -> T where T: Ord { std::cmp::min(std::cmp::max(a, x), b) }
+                    let last_index = (lines.len() - 1) as isize;
+                    let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
+
+                    // if after applying offsets the range remains nonempty
+                    if a0 <= b0 { 
+                        sender.send( (a, b+1) ).unwrap()
+                    } else { 
+                        sender.send( (b, a+1) ).unwrap()
+                    }
+                }
+            }
         }
     }
 }
