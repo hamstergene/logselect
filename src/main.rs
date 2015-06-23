@@ -1,20 +1,18 @@
-#![feature(collections, libc, scoped)]
-
+extern crate fixedbitset;
 extern crate getopts;
 extern crate libc;
 extern crate regex;
 extern crate toml;
 use regex::Regex;
-use std::collections;
 use std::fs;
-use std::iter;
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Read, Write, BufRead};
 use std::path;
 use std::sync;
 use std::sync::mpsc;
 use std::thread;
 
+#[cfg(not(test))]
 fn main()
 {
     let args : Vec<_> = std::env::args().collect();
@@ -46,43 +44,42 @@ fn main()
     }
 
     // perform
-    let input_string = match matches.free.len() {
-        0 => {
-            let mut buffer = String::new();
-            io::stdin().read_to_string(&mut buffer).unwrap();
-            buffer
-        }
+    let lines = match matches.free.len() {
+        0 => { read_lines(&mut io::stdin()) }
         1 => {
             let path = path::Path::new(&matches.free[0]);
             match fs::File::open(&path) {
                 Err(why) => { panic!("can't open {}: {}", matches.free[0], why.to_string()) },
-                Ok(ref mut f) => {
-                    let mut buffer = String::new();
-                    f.read_to_string(&mut buffer).unwrap();
-                    buffer
-                },
+                Ok(ref mut f) => { read_lines(f) },
             }
         }
         _ => { panic!("too many filename arguments ({}), expected just one", matches.free.len()) }
     };
 
-    logselect(&specs, &input_string[..], &mut io::stdout())
+    logselect(specs, lines, &mut io::stdout())
 }
 
-fn logselect<'u>(specs: &Vec<Spec>, content: &'u str, writer: &mut io::Write)
+fn read_lines(reader: &mut io::Read) -> Vec<String>
 {
-    let lines : Vec<&'u str> = iter::FromIterator::from_iter(content.lines_any());
-    let work = Work { lines : &lines, specs : specs, index : sync::Mutex::new(0) };
+    let mut rv = Vec::new();
+    for line_res in io::BufReader::new(reader).lines() {
+        rv.push(line_res.unwrap());
+    }
+    return rv
+}
+
+fn logselect(specs: Vec<Spec>, lines: Vec<String>, writer: &mut io::Write)
+{
+    let work = Work { lines : lines, specs : specs, index : sync::Mutex::new(0) };
     let work = sync::Arc::new(work);
 
     let (sender, receiver) = mpsc::channel();
-    //let num_cpus = 8; // HOW to do it!? The old API is gone somewhere
     let num_cpus = num_cpus();
     let mut threads = Vec::with_capacity(num_cpus);
     for _ in 0..threads.capacity() {
         let sender = sender.clone();
         let work = work.clone();
-        threads.push(thread::scoped(move|| {
+        threads.push(thread::spawn(move|| {
             loop {
                 let i = {
                     let mut p = work.index.lock().unwrap();
@@ -99,7 +96,7 @@ fn logselect<'u>(specs: &Vec<Spec>, content: &'u str, writer: &mut io::Write)
         }));
     }
 
-    let mut selected_indexes = collections::BitVec::from_elem(lines.len(), false);
+    let mut selected_indexes = fixedbitset::FixedBitSet::with_capacity(work.lines.len());
     let mut num_finished = 0;
     while num_finished < threads.len() {
         match receiver.recv().unwrap() {
@@ -112,14 +109,14 @@ fn logselect<'u>(specs: &Vec<Spec>, content: &'u str, writer: &mut io::Write)
 
     // output
     let mut prev_index = 0;
-    for index in 0..lines.len() {
+    for index in 0..work.lines.len() {
         if selected_indexes[index] {
             if prev_index > 0 {
                 if index + 1 - prev_index > 1 {
                     writer.write(b"\n... ... ...\n\n").unwrap();
                 }
             }
-            writer.write(lines[index].as_bytes()).unwrap();
+            writer.write(work.lines[index].as_bytes()).unwrap();
             writer.write(b"\n").unwrap();
             prev_index = index + 1;
         }
@@ -136,19 +133,19 @@ pub fn num_cpus() -> usize {
     }
 }
 
-struct Work<'a>
+struct Work
 {
-    lines: &'a Vec<&'a str>,
-    specs: &'a Vec<Spec>,
+    lines: Vec<String>,
+    specs: Vec<Spec>,
     index: sync::Mutex<isize>,
 }
 
-fn process_spec(spec: &Spec, lines: &Vec<&str>, sender: &mpsc::Sender<(isize, isize)>)
+fn process_spec(spec: &Spec, lines: &Vec<String>, sender: &mpsc::Sender<(isize, isize)>)
 {
     if let Some(ref rx) = spec.start {
         for index in 0..lines.len() {
-            if rx.is_match(lines[index]) {
-                let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, &lines, index as isize) } else { Some((index as isize,index as isize)) };
+            if rx.is_match(&lines[index][..]) {
+                let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, lines, index as isize) } else { Some((index as isize,index as isize)) };
                 if let Some((a0,b0)) = sel_range {
                     let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
 
@@ -189,6 +186,7 @@ fn consume_specs_toml(filename: &str, specs: &mut Vec<Spec>)
     consume_specs_toml_table(&table, specs);
 }
 
+#[derive(Clone)]
 struct Spec
 {
     disable: bool,
@@ -288,17 +286,17 @@ fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
     }
 }
 
-fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, isize)>
+fn try_select(spec: &Spec, lines: &Vec<String>, index: isize) -> Option<(isize, isize)>
 {
     let step = if spec.backward { -1 } else { 1 };
     let mut cursor = index + step;
     while (cursor >= 0) && (cursor < lines.len() as isize) && (cursor - index).abs() <= spec.limit  {
         match spec.stop {
-            Some(ref rx) if rx.is_match(lines[cursor as usize]) => { return Some((index, cursor)) }
+            Some(ref rx) if rx.is_match(&lines[cursor as usize][..]) => { return Some((index, cursor)) }
             _ => {}
         };
         match spec.whale {
-            Some(ref rx) if !rx.is_match(lines[cursor as usize]) => { return Some((index, cursor-step)) }
+            Some(ref rx) if !rx.is_match(&lines[cursor as usize][..]) => { return Some((index, cursor-step)) }
             _ => {}
         };
         cursor += step;
@@ -312,9 +310,7 @@ fn try_select(spec: &Spec, lines: &Vec<&str>, index: isize) -> Option<(isize, is
 #[test]
 fn test_all()
 {
-    let mut sample_content = String::new();
-    fs::File::open(&path::Path::new("tests/data/sample.txt")).unwrap().read_to_string(&mut sample_content).unwrap();
-    let sample_content = sample_content; // make immutable
+    let sample_lines = read_lines(&mut fs::File::open(&path::Path::new("tests/data/sample.txt")).unwrap());
 
     let mut failed_files = Vec::<String>::new();
     println!(""); // cargo test prepends tab to the first line, but not the rest
@@ -337,7 +333,7 @@ fn test_all()
             };
 
             let mut output = Vec::<u8>::new();
-            logselect(&specs, &sample_content, &mut output);
+            logselect(specs.clone(), sample_lines.clone(), &mut output);
 
             if expected_content.as_bytes() == &output[..] {
                 println!("+");
