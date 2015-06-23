@@ -81,17 +81,23 @@ fn logselect(specs: Vec<Spec>, lines: Vec<String>, writer: &mut io::Write)
         let work = work.clone();
         threads.push(thread::spawn(move|| {
             loop {
+                let portion_size = 100;
                 let i = {
                     let mut p = work.index.lock().unwrap();
                     let rv = *p;
-                    *p += 1;
+                    *p += portion_size as isize;
                     rv as usize
                 };
-                if i >= work.specs.len() {
+                if i >= work.lines.len() {
                     sender.send( (-1, -1) ).unwrap();
                     break;
                 }
-                process_spec(&work.specs[i], &work.lines, &sender);
+                for line_index in i..i+portion_size {
+                    if line_index >= work.lines.len() { break }
+                    for spec in &work.specs {
+                        process_spec(&spec, line_index, &work.lines, &sender);
+                    }
+                }
             }
         }));
     }
@@ -140,26 +146,24 @@ struct Work
     index: sync::Mutex<isize>,
 }
 
-fn process_spec(spec: &Spec, lines: &Vec<String>, sender: &mpsc::Sender<(isize, isize)>)
+fn process_spec(spec: &Spec, line_index: usize, lines: &Vec<String>, sender: &mpsc::Sender<(isize, isize)>)
 {
     if let Some(ref rx) = spec.start {
-        for index in 0..lines.len() {
-            if rx.is_match(&lines[index][..]) {
-                let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, lines, index as isize) } else { Some((index as isize,index as isize)) };
-                if let Some((a0,b0)) = sel_range {
-                    let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
+        if rx.is_match(&lines[line_index][..]) {
+            let sel_range = if spec.stop.is_some() || spec.whale.is_some() { try_select(&spec, lines, line_index as isize) } else { Some((line_index as isize,line_index as isize)) };
+            if let Some((a0,b0)) = sel_range {
+                let (a, b) = (a0 + spec.start_offset, b0 + spec.stop_offset);
 
-                    // std::cmp should have this function
-                    fn clamp<T>(a: T, x: T, b: T) -> T where T: Ord { std::cmp::min(std::cmp::max(a, x), b) }
-                    let last_index = (lines.len() - 1) as isize;
-                    let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
+                // std::cmp should have this function
+                fn clamp<T>(a: T, x: T, b: T) -> T where T: Ord { std::cmp::min(std::cmp::max(a, x), b) }
+                let last_index = (lines.len() - 1) as isize;
+                let (a, b) = (clamp(0, a, last_index), clamp(0, b, last_index));
 
-                    // if after applying offsets the range remains nonempty
-                    if a0 <= b0 { 
-                        sender.send( (a, b+1) ).unwrap()
-                    } else { 
-                        sender.send( (b, a+1) ).unwrap()
-                    }
+                // if after applying offsets the range remains nonempty
+                if a0 <= b0 { 
+                    sender.send( (a, b+1) ).unwrap()
+                } else { 
+                    sender.send( (b, a+1) ).unwrap()
                 }
             }
         }
