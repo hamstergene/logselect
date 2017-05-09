@@ -93,3 +93,9 @@ A section that contains only `start = <regex>`, `start_offset = -x` and `stop_of
 
 A section that contains `start` and `stop` is equivalent to `awk '/start/,/stop/'`.
 
+### Installation
+
+Homebrew:
+
+    brew install hamstergene/tap/logselect
+
