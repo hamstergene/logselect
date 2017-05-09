@@ -1,5 +1,7 @@
 # `logselect`: extract portions from log files
 
+[![Build Status](https://travis-ci.org/hamstergene/logselect.svg?branch=master)](https://travis-ci.org/hamstergene/logselect)
+
 A tool to extract compilation errors and other relevant portions of large log files, primarily to include them into build bot emails. Seeing relevant errors right in the email notification saves a lot of developer time.
 
 ### Example
