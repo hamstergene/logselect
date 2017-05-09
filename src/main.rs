@@ -3,6 +3,7 @@ extern crate getopts;
 extern crate libc;
 extern crate regex;
 extern crate toml;
+extern crate num_cpus;
 use regex::Regex;
 use std::fs;
 use std::io;
@@ -74,7 +75,7 @@ fn logselect(specs: Vec<Spec>, lines: Vec<String>, writer: &mut io::Write)
     let work = sync::Arc::new(work);
 
     let (sender, receiver) = mpsc::channel();
-    let num_cpus = num_cpus();
+    let num_cpus = num_cpus::get();
     let mut threads = Vec::with_capacity(num_cpus);
     for _ in 0..threads.capacity() {
         let sender = sender.clone();
@@ -129,16 +130,6 @@ fn logselect(specs: Vec<Spec>, lines: Vec<String>, writer: &mut io::Write)
     }
 }
 
-pub fn num_cpus() -> usize {
-    unsafe {
-        return rust_get_num_cpus() as usize;
-    }
-
-    extern {
-        fn rust_get_num_cpus() -> libc::uintptr_t;
-    }
-}
-
 struct Work
 {
     lines: Vec<String>,
@@ -181,10 +172,10 @@ fn consume_specs_toml(filename: &str, specs: &mut Vec<Spec>)
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
 
-    let mut parser = toml::Parser::new(&content[..]);
-    let table = match parser.parse() {
-        Some(t) => { t }
-        None => { panic!("parse error in {}: {}", filename, parser.errors[0]) }
+    let table = match content.parse::<toml::Value>() {
+        Ok(toml::Value::Table(t)) => { t }
+        Ok(_) => { panic!("parse error in {}: root value is not a table", filename) }
+        Err(toml_err) => { panic!("parse error in {}: {}", filename, toml_err) }
     };
 
     consume_specs_toml_table(&table, specs);
@@ -211,7 +202,7 @@ impl Spec
     }
 }
 
-fn consume_specs_toml_table(table: &toml::Table, specs: &mut Vec<Spec>)
+fn consume_specs_toml_table(table: &toml::value::Table, specs: &mut Vec<Spec>)
 {
     use toml::Value::*;
     let mut spec = Spec::new();

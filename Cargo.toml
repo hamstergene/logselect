@@ -1,6 +1,6 @@
 [package]
 name = "logselect"
-version = "0.0.2"
+version = "1.0.0"
 authors = ["Eugene Homyakov <ehomyakov@gmail.com>"]
 
 [dependencies]
@@ -9,4 +9,5 @@ regex = "*"
 getopts = "*"
 libc = "*"
 fixedbitset = "*"
+num_cpus = "*"
 
